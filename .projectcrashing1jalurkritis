@@ -1,3 +1,4 @@
+#data excel download di https://drive.google.com/drive/folders/16JsKd1sa76-m7kCXlA7bZial2AaKL80P?usp=sharing
 import pandas as pd, numpy as np
 from ortools.sat.python import cp_model
 
