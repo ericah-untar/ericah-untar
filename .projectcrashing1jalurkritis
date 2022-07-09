@@ -1,0 +1,228 @@
+import pandas as pd, numpy as np
+from ortools.sat.python import cp_model
+
+
+#INITIAL INPUT
+nodes = pd.read_excel("C:/Users/Erica Hosanna/Desktop/Tesis Demo/Data 3 Unit.xlsx", sheet_name='nodes')
+paths = pd.read_excel("C:/Users/Erica Hosanna/Desktop/Tesis Demo/Data 3 Unit.xlsx", sheet_name='paths')
+kurva_biayawaktu = pd.read_excel("C:/Users/Erica Hosanna/Desktop/Tesis Demo/Data 3 Unit.xlsx", sheet_name='kurva_biayawaktu')
+n_nodes = len(nodes)
+n_paths = len(paths)
+
+
+#PATH
+model = cp_model.CpModel()
+n = np.zeros(n_paths).tolist()
+for p in paths.index:
+    n[p] = model.NewIntVar(0,1,'n[{}]'.format([p]))
+
+def ADN (d):
+    totalduration = sum([n[p] * d[p] for p in paths.index])
+    model.Maximize(totalduration)
+    node_start = int(nodes.node[nodes.description=='start'])
+    node_end = int(nodes.node[nodes.description=='end'])
+    model.Add(sum([n[p] for p in paths.index[paths.node_from==node_start]]) == 1)
+    model.Add(sum([n[p] for p in paths.index[paths.node_to==node_end]]) == 1)
+    for node in nodes.node[nodes.description=='middle point']:
+        sum_in = sum([n[p] for p in paths.index[paths.node_to==node]])
+        sum_out = sum([n[p] for p in paths.index[paths.node_from==node]])
+        model.Add(sum_in == sum_out)
+    solver = cp_model.CpSolver()
+    status = solver.Solve(model)
+    #print
+    print('status =', solver.StatusName(status))
+    print('OF =', solver.ObjectiveValue())
+    paths['CP'] = 0                          
+    for p in paths.index:
+        paths.CP[p] = solver.Value(n[p])
+    print(paths)
+    totalduration = solver.ObjectiveValue()
+
+
+#inputs
+paths['maxC'] = 0                          
+for p in paths.index:
+    paths.maxC[p] = paths.ND[p] - paths.CD[p]
+paths['C'] = 0   
+paths['D'] = 0 
+for p in paths.index:
+    paths.D[p] = paths.ND[p]                        
+print (paths)
+solver = cp_model.CpSolver()
+status = solver.Solve(model)
+
+ADN (paths.ND)
+totaldurationnormal = solver.ObjectiveValue()
+
+totaldurationcrash = sum([n[p] * paths.CD[p] for p in paths.index])
+model.Maximize(totaldurationcrash)
+node_start = int(nodes.node[nodes.description=='start'])
+node_end = int(nodes.node[nodes.description=='end'])
+model.Add(sum([n[p] for p in paths.index[paths.node_from==node_start]]) == 1)
+model.Add(sum([n[p] for p in paths.index[paths.node_to==node_end]]) == 1)
+for node in nodes.node[nodes.description=='middle point']:
+    sum_in = sum([n[p] for p in paths.index[paths.node_to==node]])
+    sum_out = sum([n[p] for p in paths.index[paths.node_from==node]])
+    model.Add(sum_in == sum_out)
+solver = cp_model.CpSolver()
+solver = cp_model.CpSolver()
+status = solver.Solve(model)
+#print
+print('status =', solver.StatusName(status))
+print('totaldurationcrash =', solver.ObjectiveValue())
+paths['CP'] = 0                          
+for p in paths.index:
+    paths.CP[p] = solver.Value(n[p])
+print(paths)
+totaldurationcrash = solver.ObjectiveValue()
+
+
+totalduration = sum([n[p] * paths.D[p] for p in paths.index])
+model.Maximize(totalduration)
+node_start = int(nodes.node[nodes.description=='start'])
+node_end = int(nodes.node[nodes.description=='end'])
+model.Add(sum([n[p] for p in paths.index[paths.node_from==node_start]]) == 1)
+model.Add(sum([n[p] for p in paths.index[paths.node_to==node_end]]) == 1)
+for node in nodes.node[nodes.description=='middle point']:
+    sum_in = sum([n[p] for p in paths.index[paths.node_to==node]])
+    sum_out = sum([n[p] for p in paths.index[paths.node_from==node]])
+    model.Add(sum_in == sum_out)
+solver = cp_model.CpSolver()
+solver = cp_model.CpSolver()
+status = solver.Solve(model)
+#print
+print('status =', solver.StatusName(status))
+print('totaldurationnormal =', solver.ObjectiveValue())
+paths['CP'] = 0                          
+for p in paths.index:
+    paths.CP[p] = solver.Value(n[p])
+print(paths)
+totalduration = solver.ObjectiveValue()
+
+crashablecritacts = list(paths.CS) and paths[(paths.CP == 1) & (paths.C < paths.maxC)]
+
+#FUNCTION
+indirect_cost = int(850000)
+while totalduration != totaldurationcrash :     
+    #menyortir aktivitas kritis yang bisa di crash dari yang CS paling kecil
+    crashablecritacts = list(paths.CS) and paths[(paths.CP == 1) & (paths.C < paths.maxC)]
+    sorted_crashablecritacts = crashablecritacts.sort_values(by=['CS'],ascending=True)
+    #aktifitas kritis dengan biaya paling kecil
+    mincostindex = sorted_crashablecritacts.index[0] 
+    while (paths.iloc[mincostindex,10] < paths.iloc[mincostindex,9]):
+        #crashing 1 hari dari aktifitas mincostindex
+        paths.iloc[mincostindex,10] = paths.iloc[mincostindex,10] + 1
+        paths.iloc[mincostindex,7] = paths.iloc[mincostindex,7] - 1
+        #mencari jalur kiritis dengan durasi baru        
+        totalduration = sum([n[p] * paths.D[p] for p in paths.index])
+        model.Maximize(totalduration)
+        node_start = int(nodes.node[nodes.description=='start'])
+        node_end = int(nodes.node[nodes.description=='end'])
+        model.Add(sum([n[p] for p in paths.index[paths.node_from==node_start]]) == 1)
+        model.Add(sum([n[p] for p in paths.index[paths.node_to==node_end]]) == 1)
+        for node in nodes.node[nodes.description=='middle point']:
+            sum_in = sum([n[p] for p in paths.index[paths.node_to==node]])
+            sum_out = sum([n[p] for p in paths.index[paths.node_from==node]])
+            model.Add(sum_in == sum_out)
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+        #print
+        paths['CP'] = 0                          
+        for p in paths.index:
+            paths.CP[p] = solver.Value(n[p])
+        totalduration = solver.ObjectiveValue()
+        total_indirect_cost = int (totalduration * indirect_cost)
+        total_direct_cost = sum(paths.NC + (paths.CS * paths.C))
+        total_cost = int (total_indirect_cost + total_direct_cost)
+        print (paths)
+        new_row = pd.DataFrame({"duration": [totalduration], "activity": [paths.iloc[mincostindex,0]], "indirectcost":[total_indirect_cost], "directcost" :[total_direct_cost], "totalcost":[total_cost]})
+        kurva_biayawaktu = kurva_biayawaktu.append(new_row, True)
+        if paths.iloc[mincostindex,10] == paths.iloc[mincostindex,9] or totalduration == totaldurationcrash:
+            break
+    if totalduration == totaldurationcrash :
+        print (kurva_biayawaktu)
+        break 
+
+
+durasitercepatindex = list(kurva_biayawaktu.duration).index(min(kurva_biayawaktu.duration))
+biayaoptimumindex = list(kurva_biayawaktu.totalcost).index(min(kurva_biayawaktu.totalcost))
+
+print ('Durasi Tercepat=',kurva_biayawaktu.iloc[durasitercepatindex,0],'Biaya =', kurva_biayawaktu.iloc[durasitercepatindex,3])
+print ('Durasi Optimum=',kurva_biayawaktu.iloc[biayaoptimumindex,0],'Biaya =', kurva_biayawaktu.iloc[biayaoptimumindex,3])
+
+#mengembalikan paths seperti semula
+paths['C'] = 0   
+paths['D'] = 0 
+for p in paths.index:
+    paths.D[p] = paths.ND[p]                        
+print (paths) 
+totalduration = sum([n[p] * paths.D[p] for p in paths.index])
+model.Maximize(totalduration)
+node_start = int(nodes.node[nodes.description=='start'])
+node_end = int(nodes.node[nodes.description=='end'])
+model.Add(sum([n[p] for p in paths.index[paths.node_from==node_start]]) == 1)
+model.Add(sum([n[p] for p in paths.index[paths.node_to==node_end]]) == 1)
+for node in nodes.node[nodes.description=='middle point']:
+    sum_in = sum([n[p] for p in paths.index[paths.node_to==node]])
+    sum_out = sum([n[p] for p in paths.index[paths.node_from==node]])
+    model.Add(sum_in == sum_out)
+solver = cp_model.CpSolver()
+status = solver.Solve(model)
+#print
+print('status =', solver.StatusName(status))
+print('totaldurationnormal =', solver.ObjectiveValue())
+paths['CP'] = 0                          
+for p in paths.index:
+    paths.CP[p] = solver.Value(n[p])
+print(paths)
+totalduration = solver.ObjectiveValue()
+
+
+while totalduration != kurva_biayawaktu.iloc[biayaoptimumindex,0] :     
+    #menyortir aktivitas kritis yang bisa di crash dari yang CS paling kecil
+    crashablecritacts = list(paths.CS) and paths[(paths.CP == 1) & (paths.C < paths.maxC)]
+    sorted_crashablecritacts = crashablecritacts.sort_values(by=['CS'],ascending=True)
+    #aktifitas kritis dengan biaya paling kecil
+    mincostindex = sorted_crashablecritacts.index[0] 
+    while (paths.iloc[mincostindex,10] < paths.iloc[mincostindex,9]):
+        #crashing 1 hari dari aktifitas mincostindex
+        paths.iloc[mincostindex,10] = paths.iloc[mincostindex,10] + 1
+        paths.iloc[mincostindex,7] = paths.iloc[mincostindex,7] - 1
+        #mencari jalur kiritis dengan durasi baru        
+        totalduration = sum([n[p] * paths.D[p] for p in paths.index])
+        model.Maximize(totalduration)
+        node_start = int(nodes.node[nodes.description=='start'])
+        node_end = int(nodes.node[nodes.description=='end'])
+        model.Add(sum([n[p] for p in paths.index[paths.node_from==node_start]]) == 1)
+        model.Add(sum([n[p] for p in paths.index[paths.node_to==node_end]]) == 1)
+        for node in nodes.node[nodes.description=='middle point']:
+            sum_in = sum([n[p] for p in paths.index[paths.node_to==node]])
+            sum_out = sum([n[p] for p in paths.index[paths.node_from==node]])
+            model.Add(sum_in == sum_out)
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+        #print
+        paths['CP'] = 0                          
+        for p in paths.index:
+            paths.CP[p] = solver.Value(n[p])
+        totalduration = solver.ObjectiveValue()
+        if paths.iloc[mincostindex,10] == paths.iloc[mincostindex,9] or totalduration == kurva_biayawaktu.iloc[biayaoptimumindex,0]:
+            break
+    if totalduration == kurva_biayawaktu.iloc[biayaoptimumindex,0] :
+        break
+
+
+jalurkritis = list(paths.CP) and paths[(paths.CP == 1)]
+jalurkritis['ST'] = 0        
+jalurkritis['ET'] = 0
+jalurkritis.index = range (len(jalurkritis.index))
+for k in jalurkritis.index:
+    jalurkritis.ST[0] = 0
+    jalurkritis.ET[k] =  jalurkritis.ST[k] + jalurkritis.D[k]
+    jalurkritis.ST[k+1] =  jalurkritis.ET[k] 
+
+print(jalurkritis[['act', 'CP', 'D', 'ST', 'ET']])
+
+kurva_biayawaktu.to_excel("kurva_biayawaktu_3Unit.xlsx")
+paths.to_excel("paths_3Unit.xlsx")
+jalurkritis.to_excel("jadwal_jalurkritis_3Unit.xlsx")
