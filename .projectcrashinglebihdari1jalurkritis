@@ -304,19 +304,7 @@ biayaoptimumindex = list(kurva_biayawaktu.totalcost).index(min(kurva_biayawaktu.
 print('Durasi Tercepat =',kurva_biayawaktu.iloc[durasitercepatindex,0],'Biaya =', kurva_biayawaktu.iloc[durasitercepatindex,3])
 print('Durasi Optimum =',kurva_biayawaktu.iloc[biayaoptimumindex,0],'Biaya =', kurva_biayawaktu.iloc[biayaoptimumindex,3])
 
-jalurkritis = list(paths.CP) and paths[(paths.CP == 1)]
-jalurkritis['ST'] = 0        
 
-jalurkritis['ET'] = 0
-jalurkritis.index = range (len(jalurkritis.index))
-                
-for k in jalurkritis.index:
-    jalurkritis.ST[0] = 0
-    jalurkritis.ET[k] =  jalurkritis.ST[k] + jalurkritis.D[k]
-    jalurkritis.ST[k+1] =  jalurkritis.ET[k] 
-
-print(jalurkritis[['act', 'CP', 'D', 'ST', 'ET']])
 
 kurva_biayawaktu.to_excel("kurva_biayawaktu_databaru.xlsx")
 paths.to_excel("paths_databaru.xlsx")
-jalurkritis.to_excel("jadwal_jalurkritis_databarut.xlsx")
