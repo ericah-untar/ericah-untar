@@ -1,0 +1,322 @@
+import pandas as pd, numpy as np
+from ortools.sat.python import cp_model
+
+#INITIAL INPUT
+nodes = pd.read_excel("Contoh Data Multiple CP.xlsx", sheet_name='nodes')
+paths = pd.read_excel("Contoh Data Multiple CP.xlsx", sheet_name='paths')
+kurva_biayawaktu = pd.read_excel("Contoh Data Multiple CP.xlsx", sheet_name='kurva_biayawaktu')
+indirect_cost = int(850000)
+
+n_nodes = len(nodes)
+n_paths = len(paths)
+
+#PATH
+model = cp_model.CpModel()
+n = np.zeros(n_paths).tolist()
+for p in paths.index:
+    n[p] = model.NewIntVar(0,1,'n[{}]'.format([p]))
+
+def ADN(d):
+    totalduration = sum([n[p] * d[p] for p in paths.index])
+    model.Maximize(totalduration)
+    node_start = int(nodes.node[nodes.description=='start'])
+    node_end = int(nodes.node[nodes.description=='end'])
+    model.Add(sum([n[p] for p in paths.index[paths.node_from==node_start]]) == 1)
+    model.Add(sum([n[p] for p in paths.index[paths.node_to==node_end]]) == 1)
+    for node in nodes.node[nodes.description=='middle point']:
+        sum_in = sum([n[p] for p in paths.index[paths.node_to==node]])
+        sum_out = sum([n[p] for p in paths.index[paths.node_from==node]])
+        model.Add(sum_in == sum_out)
+    solver = cp_model.CpSolver()
+    status = solver.Solve(model)
+    #print
+    print('status = ', solver.StatusName(status))
+    print('OF =', solver.ObjectiveValue())
+    paths['CP'] = 0                          
+    for p in paths.index:
+        paths.CP[p] = solver.Value(n[p])
+    print(paths)
+    totalduration = solver.ObjectiveValue()
+    totalduration_status = solver.StatusName(status)
+
+#inputs
+paths['maxC'] = 0                          
+for p in paths.index:
+    paths.maxC[p] = paths.ND[p] - paths.CD[p]
+paths['C'] = 0   
+paths['D'] = 0 
+for p in paths.index:
+    paths.D[p] = paths.ND[p]                        
+print(paths)
+solver = cp_model.CpSolver()
+status = solver.Solve(model)
+
+ADN (paths.ND)
+
+totaldurationnormal_status = solver.StatusName(status)
+
+totaldurationcrash = sum([n[p] * paths.CD[p] for p in paths.index])
+model.Maximize(totaldurationcrash)
+node_start = int(nodes.node[nodes.description=='start'])
+node_end = int(nodes.node[nodes.description=='end'])
+model.Add(sum([n[p] for p in paths.index[paths.node_from==node_start]]) == 1)
+model.Add(sum([n[p] for p in paths.index[paths.node_to==node_end]]) == 1)
+for node in nodes.node[nodes.description=='middle point']:
+    sum_in = sum([n[p] for p in paths.index[paths.node_to==node]])
+    sum_out = sum([n[p] for p in paths.index[paths.node_from==node]])
+    model.Add(sum_in == sum_out)
+solver = cp_model.CpSolver()
+status = solver.Solve(model)
+#print
+print('status =', solver.StatusName(status))
+print('totaldurationcrash =', solver.ObjectiveValue())
+paths['CP'] = 0                          
+for p in paths.index:
+    paths.CP[p] = solver.Value(n[p])
+print(paths)
+totaldurationcrash = solver.ObjectiveValue()
+totaldurationcras_status = solver.StatusName(status)
+
+totalduration = sum([n[p] * paths.D[p] for p in paths.index])
+model.Maximize(totalduration)
+node_start = int(nodes.node[nodes.description=='start'])
+node_end = int(nodes.node[nodes.description=='end'])
+model.Add(sum([n[p] for p in paths.index[paths.node_from==node_start]]) == 1)
+model.Add(sum([n[p] for p in paths.index[paths.node_to==node_end]]) == 1)
+for node in nodes.node[nodes.description=='middle point']:
+    sum_in = sum([n[p] for p in paths.index[paths.node_to==node]])
+    sum_out = sum([n[p] for p in paths.index[paths.node_from==node]])
+    model.Add(sum_in == sum_out)
+solver = cp_model.CpSolver()
+solver = cp_model.CpSolver()
+status = solver.Solve(model)
+#print
+print('status =', solver.StatusName(status))
+print('totaldurationnormal =', solver.ObjectiveValue())
+paths['CP'] = 0                          
+for p in paths.index:
+    paths.CP[p] = solver.Value(n[p])
+print(paths)
+totalduration = solver.ObjectiveValue()
+
+crashablecritacts = list(paths.CS) and paths[(paths.CP == 1) & (paths.C < paths.maxC)]
+
+#ITERASI
+while totalduration != totaldurationcrash:
+    crashablecritacts = list(paths.CS) and paths[(paths.CP == 1) & (paths.C < paths.maxC)]
+    sorted_crashablecritacts = crashablecritacts.sort_values(by=['CS'],ascending=True)
+    mincostindex = sorted_crashablecritacts.index[0]
+    while (paths.iloc[mincostindex,10] != paths.iloc[mincostindex,9]):
+        crashablecritacts = list(paths.CS) and paths[(paths.CP == 1) & (paths.C < paths.maxC)]
+        sorted_crashablecritacts = crashablecritacts.sort_values(by=['CS'],ascending=True)
+        mincostindex = sorted_crashablecritacts.index[0]
+        paths.iloc[mincostindex,10] = paths.iloc[mincostindex,10] + 1
+        paths.iloc[mincostindex,7] = paths.iloc[mincostindex,7] - 1      
+        totalduration = sum([n[p] * paths.D[p] for p in paths.index])
+        model.Maximize(totalduration)
+        node_start = int(nodes.node[nodes.description=='start'])
+        node_end = int(nodes.node[nodes.description=='end'])
+        model.Add(sum([n[p] for p in paths.index[paths.node_from==node_start]]) == 1)
+        model.Add(sum([n[p] for p in paths.index[paths.node_to==node_end]]) == 1)
+        for node in nodes.node[nodes.description=='middle point']:
+            sum_in = sum([n[p] for p in paths.index[paths.node_to==node]])
+            sum_out = sum([n[p] for p in paths.index[paths.node_from==node]])
+            model.Add(sum_in == sum_out)
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+        #print
+        paths['CP'] = 0                          
+        for p in paths.index:
+            paths.CP[p] = solver.Value(n[p])
+        totalduration = solver.ObjectiveValue()
+        total_indirect_cost = int (totalduration * indirect_cost)
+        total_direct_cost = sum(paths.NC + (paths.CS * paths.C))
+        total_cost = int (total_indirect_cost + total_direct_cost)
+        new_row = pd.DataFrame({"duration": [int(totalduration)], "act": [paths.iloc[mincostindex,0]], "indirectcost":[total_indirect_cost], "directcost" :[total_direct_cost], "totalcost":[total_cost]})
+        kurva_biayawaktu = kurva_biayawaktu.append(new_row, True)
+        if paths.iloc[mincostindex,10] == paths.iloc[mincostindex,9] or totalduration == totaldurationcrash:
+            break
+    if totalduration == totaldurationcrash:        
+        break
+
+jk_opt = pd.DataFrame(columns=['duration', 'act'])
+for d in kurva_biayawaktu.index:
+    a = kurva_biayawaktu.duration[d]
+    b = len(kurva_biayawaktu.index[kurva_biayawaktu.duration==a]) -1
+    if kurva_biayawaktu.duration[d] == kurva_biayawaktu.duration[d+b] and kurva_biayawaktu.act[d]!=kurva_biayawaktu.act[d+b]:       
+        sum_act = [kurva_biayawaktu.act[d]]
+        for i in range(b):   
+            sum_act.append(kurva_biayawaktu.act[d+i+1])
+        new_jkrow = pd.DataFrame({"duration": [a], "act" : [sum_act]})
+        jk_opt = jk_opt.append(new_jkrow, True)
+jk_opt = jk_opt.loc[jk_opt['act'].astype(str).drop_duplicates().index]
+jk_opt['CSt'] = 0
+for c in jk_opt.index:
+    CSa = pd.DataFrame(columns=['act', 'CS'])
+    for p in paths.index:
+        if paths.act[p] in jk_opt.act[c]:
+            new_CSarow = pd.DataFrame({"act": [paths.act[p]], "CS" : [paths.CS[p]]})
+            CSa = CSa.append(new_CSarow, True)
+    jk_opt.CSt[c] = sum(CSa.CS)
+jk_opt = jk_opt.sort_values(by=['CSt'],ascending=True)
+jk_opt.index = range(len(jk_opt.index))
+print(jk_opt)
+
+for p in paths.index:
+    paths.D[p] = paths.ND[p]
+    paths.C[p] = 0
+kurva_biayawaktu1 = pd.DataFrame(columns=['duration', 'act', 'indirectcost', 'directcost', 'totalcost']) 
+
+totalduration = sum([n[p] * paths.D[p] for p in paths.index])
+model.Maximize(totalduration)
+node_start = int(nodes.node[nodes.description=='start'])
+node_end = int(nodes.node[nodes.description=='end'])
+model.Add(sum([n[p] for p in paths.index[paths.node_from==node_start]]) == 1)
+model.Add(sum([n[p] for p in paths.index[paths.node_to==node_end]]) == 1)
+for node in nodes.node[nodes.description=='middle point']:
+    sum_in = sum([n[p] for p in paths.index[paths.node_to==node]])
+    sum_out = sum([n[p] for p in paths.index[paths.node_from==node]])
+    model.Add(sum_in == sum_out)
+solver = cp_model.CpSolver()
+status = solver.Solve(model)
+#print
+print('status =', solver.StatusName(status))
+print('totaldurationnormal =', solver.ObjectiveValue())
+paths['CP'] = 0                          
+for p in paths.index:
+    paths.CP[p] = solver.Value(n[p])
+print(paths)
+totalduration = solver.ObjectiveValue()
+crashablecritacts = list(paths.CS) and paths[(paths.CP == 1) & (paths.C < paths.maxC)]
+
+#ITERASI DENGAN >2 Jalur Kritis
+while totalduration != totaldurationcrash :     
+    crashablecritacts = list(paths.CS) and paths[(paths.CP == 1) & (paths.C < paths.maxC)]
+    sorted_crashablecritacts = crashablecritacts.sort_values(by=['CS'],ascending=True)
+    sorted_crashablecritacts.index = range(len(sorted_crashablecritacts.index))
+    mincostindex = sorted_crashablecritacts.index[0]
+    while (paths.iloc[mincostindex,10] != paths.iloc[mincostindex,9]):
+        if paths.D[0]==paths.D[1]+paths.D[2]:
+            paths.CP[0]=1
+            paths.CP[1]=1
+            paths.CP[2]=1            
+        if paths.D[3]==paths.D[4]+paths.D[5] and paths.D[3]==paths.D[6]+paths.D[7]:
+            paths.CP[3]=1
+            paths.CP[4]=1
+            paths.CP[5]=1 
+            paths.CP[6]=1
+            paths.CP[7]=1
+        if paths.C[7] == paths.maxC[7]:
+            paths.CP[3]=0
+            paths.CP[4]=0
+            paths.CP[5]=0 
+            paths.CP[6]=0
+            paths.CP[7]=0
+        crashablecritacts = list(paths.CS) and paths[(paths.CP == 1) & (paths.C < paths.maxC)]
+        sorted_crashablecritacts = crashablecritacts.sort_values(by=['CS'],ascending=True)
+        sorted_crashablecritacts.index = range(len(sorted_crashablecritacts.index))
+        jk_opt['CP'] = 0
+        for jk in jk_opt.index:
+            CPver = pd.DataFrame(columns = ['stat'])
+            for c in sorted_crashablecritacts.index :
+                if (sorted_crashablecritacts.act[c] in jk_opt.act[jk])==True:
+                    CPver_row = pd.DataFrame({"stat": [1]})
+                    CPver = CPver.append(CPver_row,True)                   
+                elif (sorted_crashablecritacts.act[c] in jk_opt.act[jk])!=True:
+                    CPver_row = pd.DataFrame({"stat": [0]})
+                    CPver = CPver.append(CPver_row,True)
+            if sum(CPver.stat)== len(jk_opt.act[jk]):
+                jk_opt.CP[jk] = 1                 
+        for d in (jk_opt.index[jk_opt.CP == 1]):
+            for e in sorted_crashablecritacts.index :
+                if sorted_crashablecritacts.act[e] in jk_opt.act[d]:
+                    sorted_crashablecritacts = sorted_crashablecritacts.drop([e])  
+        if jk_opt.index[jk_opt.CP == 1].empty == False :
+            cpjk_opt = jk_opt.loc[jk_opt['CP'] == 1]
+            cpjk_opt.index = range(len(cpjk_opt.index))           
+            if sorted_crashablecritacts.empty:
+                CPc = pd.DataFrame(columns = ['p_index','act', 'CS'])
+                for jk in cpjk_opt.act[0]:
+                    for p in paths.index :
+                        if paths.act[p] ==jk:
+                            CPc_CS = int(paths.CS[paths.index[paths.act ==jk]])
+                            print(jk, p, CPc_CS)
+                            CPc_row = pd.DataFrame({"p_index": [p], "act": [jk], "CS": [CPc_CS]})
+                            CPc = CPc.append(CPc_row,True) 
+                CPc = CPc.sort_values(by=['CS'],ascending=False)
+                CPc.index = range(len(CPc.index))
+                mincostindex = int(CPc.p_index[0])
+            elif cpjk_opt.CSt[0] <= sorted_crashablecritacts.CS[min(sorted_crashablecritacts.index)]:
+                CPc = pd.DataFrame(columns = ['p_index','act', 'CS'])
+                for jk in cpjk_opt.act[0]:
+                    for p in paths.index :
+                        if paths.act[p] ==jk:
+                            CPc_CS = int(paths.CS[paths.index[paths.act ==jk]])
+                            CPc_row = pd.DataFrame({"p_index": [p], "act": [jk], "CS": [CPc_CS]})
+                            CPc = CPc.append(CPc_row,True) 
+                CPc = CPc.sort_values(by=['CS'],ascending=False)
+                CPc.index = range(len(CPc.index))
+                mincostindex = int(CPc.p_index[0])
+            
+            elif cpjk_opt.CSt[0] > sorted_crashablecritacts.CS[min(sorted_crashablecritacts.index)]:
+                for p in paths.index:
+                    if paths.act[p] == sorted_crashablecritacts.act[min(sorted_crashablecritacts.index)]:
+                        mincostindex = p
+        elif jk_opt.index[jk_opt.CP == 1].empty :    
+            for p in paths.index:
+                if paths.act[p] == sorted_crashablecritacts.act[min(sorted_crashablecritacts.index)]:
+                    mincostindex = p
+
+        paths.iloc[mincostindex,10] = paths.iloc[mincostindex,10] + 1
+        paths.iloc[mincostindex,7] = paths.iloc[mincostindex,7] - 1      
+        totalduration = sum([n[p] * paths.D[p] for p in paths.index])
+        model.Maximize(totalduration)
+        node_start = int(nodes.node[nodes.description=='start'])
+        node_end = int(nodes.node[nodes.description=='end'])
+        model.Add(sum([n[p] for p in paths.index[paths.node_from==node_start]]) == 1)
+        model.Add(sum([n[p] for p in paths.index[paths.node_to==node_end]]) == 1)
+        for node in nodes.node[nodes.description=='middle point']:
+            sum_in = sum([n[p] for p in paths.index[paths.node_to==node]])
+            sum_out = sum([n[p] for p in paths.index[paths.node_from==node]])
+            model.Add(sum_in == sum_out)
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+        #print
+        paths['CP'] = 0                          
+        for p in paths.index:
+            paths.CP[p] = solver.Value(n[p])
+        print(paths)
+        print(sorted_crashablecritacts)
+        totalduration = solver.ObjectiveValue()
+        total_indirect_cost = int (totalduration * indirect_cost)
+        total_direct_cost = sum(paths.NC + (paths.CS * paths.C))
+        total_cost = int (total_indirect_cost + total_direct_cost)
+        new_row = pd.DataFrame({"duration": [int(totalduration)], "act": [paths.iloc[mincostindex,0]], "indirectcost":[total_indirect_cost], "directcost" :[total_direct_cost], "totalcost":[total_cost]})
+        kurva_biayawaktu1 = kurva_biayawaktu1.append(new_row, True)
+        if paths.iloc[mincostindex,10] == paths.iloc[mincostindex,9] or totalduration == totaldurationcrash:
+            print(kurva_biayawaktu1)
+            break
+
+durasitercepatindex = list(kurva_biayawaktu.duration).index(min(kurva_biayawaktu.duration))
+biayaoptimumindex = list(kurva_biayawaktu.totalcost).index(min(kurva_biayawaktu.totalcost))
+
+
+print('Durasi Tercepat =',kurva_biayawaktu.iloc[durasitercepatindex,0],'Biaya =', kurva_biayawaktu.iloc[durasitercepatindex,3])
+print('Durasi Optimum =',kurva_biayawaktu.iloc[biayaoptimumindex,0],'Biaya =', kurva_biayawaktu.iloc[biayaoptimumindex,3])
+
+jalurkritis = list(paths.CP) and paths[(paths.CP == 1)]
+jalurkritis['ST'] = 0        
+
+jalurkritis['ET'] = 0
+jalurkritis.index = range (len(jalurkritis.index))
+                
+for k in jalurkritis.index:
+    jalurkritis.ST[0] = 0
+    jalurkritis.ET[k] =  jalurkritis.ST[k] + jalurkritis.D[k]
+    jalurkritis.ST[k+1] =  jalurkritis.ET[k] 
+
+print(jalurkritis[['act', 'CP', 'D', 'ST', 'ET']])
+
+kurva_biayawaktu.to_excel("kurva_biayawaktu_databaru.xlsx")
+paths.to_excel("paths_databaru.xlsx")
+jalurkritis.to_excel("jadwal_jalurkritis_databarut.xlsx")
