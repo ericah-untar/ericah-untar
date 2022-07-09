@@ -1,5 +1,4 @@
 
-**ericah-untar/ericah-untar** is a 
 
 Optimasi Proyek Repetitive dengan Metode Dynamic Programming
 
